@@ -46,6 +46,12 @@ probe` for the calls a guide needs. The feature ideas and the open
 decisions (the first starting zone, what ships at launch) are in the
 project's notes, not in the repo.
 
+How routes are written, ticked off and planned is drafted in
+`docs/STEP_FORMAT.md` (2026-10-19, not built yet). The owner's aim
+(2026-10-19): Claude works out the fastest route to level, so routes come
+from a planner over quest facts and are made faster with times from real
+runs, never copied from another guide.
+
 ## How this repo was set up
 
 It copies its sisters on purpose, most closely Pets (copied 2026-10-18, the
