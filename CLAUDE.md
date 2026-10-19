@@ -50,7 +50,13 @@ How routes are written, ticked off and planned is drafted in
 `docs/STEP_FORMAT.md` (2026-10-19, not built yet). The owner's aim
 (2026-10-19): Claude works out the fastest route to level, so routes come
 from a planner over quest facts and are made faster with times from real
-runs, never copied from another guide.
+runs, never copied from another guide. Whatever can be gathered without
+playing comes first (the owner, 2026-10-19): `tools/make_quest_facts.py
+<pfQuest> <mangoszero database> <tables folder>` writes the planner's
+`tools/facts/` from Classic data (cleared for routes, 2026-10-19), the
+Forever client's game tables and Equipment's learned quests and spots.
+Never commit the sources or the tables, never name where the tables were
+downloaded, and rerun it when they are pulled again.
 
 ## How this repo was set up
 

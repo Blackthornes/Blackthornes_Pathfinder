@@ -1,7 +1,9 @@
 # The step format (draft)
 
-**A draft for the owner to look over (2026-10-19). Nothing here is built
-yet**, and every name in it can still change. It says how a route is
+**A draft for the owner to look over (2026-10-19). Nothing in the game is
+built yet**, and every name in it can still change; the owner's answers to
+its questions are under "Decided". The quest facts tool is built (see
+"Where the facts come from"). It says how a route is
 written down, how the guide knows each step is done, and how routes get
 made: worked out by a planner to be the fastest way to level, then made
 faster with times from real runs.
@@ -183,8 +185,10 @@ Like every saved name in the house, once shipped these are never renamed.
 
 "It must seem like magic" means the guide does the routine clicks itself,
 for **the step to do now only**: never a quest the route did not ask for.
-Each is its own setting, Shift held pauses them all, and each action
-reads the window first, as the findings say it can:
+They are on by default while the guide is following a route (the owner,
+2026-10-19), and do nothing when it isn't. Each is its own setting, Shift
+held pauses them all, and each action reads the window first, as the
+findings say it can:
 
 - **Accept:** the quest page shows "offer" and `GetQuestID` is the step's
   quest: `AcceptQuest()`. From a gossip list, pick it by ID first
@@ -255,21 +259,49 @@ That comes after the routes work.
 
 Every fact must come from the client, from play, or from data the project
 has cleared. Never from another guide (their routes are theirs; see
-`CLAUDE.md`). Forever adds quests from level 1 with IDs Classic data lacks,
-so the client and play come first:
+`CLAUDE.md`). The owner's rule (2026-10-19): **whatever can be gathered
+without playing comes first**, so a route can be planned before anyone
+walks it, and play only fills the gaps and the timings.
 
-- **The recorder** (`/bpath record`, a draft name): while it is on, the
-  guide keeps every quest offered, accepted, completed and turned in, with
-  the quest ID, the NPC ID, the map and spot, the time and the character's
-  XP, plus each flight path, innkeeper, vendor and trainer. A run with the
-  recorder on is a draft route and a set of timings at once. A tool folds
-  the save into the facts, the way Equipment's `tools/forever_quests.py`
-  reads `learnedQuests`.
-- **The Forever client's game tables** where they hold the fact (Equipment
-  already reads quest IDs from them), so a quest the recorder hasn't met
-  can still be planned.
-- **Classic data** only where it has been cleared for the project, and
-  only for quests Forever kept unchanged.
+**Before play: `tools/make_quest_facts.py`** (built). It reads Classic's
+quest data (pfQuest, MIT, and the mangoszero database; the owner cleared
+Classic data for routes, 2026-10-19), the Forever client's game tables and
+what Equipment has already learned on Forever, and writes
+`tools/facts/quests.jsonl` and `tools/facts/flights.json`. Run against
+Forever build 1.60.1.70245 on 2026-10-19:
+
+- **3,662 Classic quests Forever still has**, each with who gives it and
+  takes it back (NPC IDs and spots), its level and the level it opens at,
+  the race and class it is for, the quests before it, its objectives (mobs
+  to kill with up to 24 spawn spots each, objects, items with the mobs that
+  drop them and how often), and its XP.
+- **771 Classic quests Forever does not have** (not in its QuestV2 table),
+  left out, so no route sends anyone to a quest that is gone.
+- **XP:** Classic's number, worked out the way Classic's server does, and
+  the nearest row of Forever's own XP table beside it. The two agree within
+  a few percent (Cutting Teeth 150 and 130, Vile Familiars 450 and 445,
+  level 8 quests 700 and 700), so Forever gives about Classic's XP.
+- **Flight paths:** every node with its side and its spot on the map, and
+  every path with its cost and length in yards, for planning flights
+  before any are learned. The costs match the probe (Orgrimmar to Thunder
+  Bluff 50 copper in the table, 45 in game: the 10% discount; Crossroads
+  110 and 99).
+- **2,947 quests only Forever has.** Equipment had met 46 of them (most on
+  Zephras Isle, one in the Valley of Trials: Wayward Weapons). The other
+  2,901 are IDs with nothing known yet. Many are likely unused, but some are
+  new leveling quests, and only play finds those.
+
+In Durotar alone that gives 73 Horde quests up to level 14 to plan from,
+with only one of Forever's own known so far.
+
+**During play: the recorder** (`/bpath record`, a draft name). The owner
+will level with it on (2026-10-19); it is not offered to players for now.
+It keeps every quest offered, accepted, completed and turned in, with the
+quest ID, the NPC ID, the map and spot, the time and the character's XP,
+plus each flight path, innkeeper, vendor and trainer, and each mob killed
+with its spot. A tool folds the save into the facts (as Equipment's
+`tools/forever_quests.py` reads `learnedQuests`): Forever's new quests get
+their givers and objectives, and every step gets a real time.
 
 ## Checking a route
 
@@ -299,15 +331,13 @@ refuses one where:
   finishes, for the `hearth` step.
 - **Flight costs:** the four reachable paths that read a cost of 0.
 
-## Open questions for the owner
+## Decided (the owner, 2026-10-19)
 
-1. **The first route.** The probes ran in the Valley of Trials, so the
-   orc and troll start is the cheapest to begin with. Is that the one?
-2. **The clicks, on by default or off?** The draft has them on for the
-   step to do now only, with Shift to pause.
-3. **Recording runs.** The fastest routes need timed runs. Would you play
-   the first routes with the recorder on, or should it be built so players
-   can opt in to send timings, as Equipment shares vendors?
-4. **Classic data.** Equipment uses Classic quest data for gear. Is it
-   cleared for leveling routes too (for quests Forever didn't change), or
-   only what the client and play give?
+1. **The first route** is the Valley of Trials, for now. Forever's maps
+   add Darkspear Islands, so trolls may start there instead of beside the
+   orcs: check before the route says it is for both.
+2. **The clicks** are on by default while the guide is following a route.
+3. **Timings** come from the owner's own leveling with the recorder on.
+4. **Classic data** is cleared for routes, for the quests Forever kept.
+
+Still to decide: what ships at launch.
