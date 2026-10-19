@@ -1,0 +1,40 @@
+## Interface: 16001
+## Title: Blackthornes Pathfinder
+## Notes: A step-by-step leveling guide: where to go, which quests to take and turn in, what to buy, where to fly and when to train.
+## Author: Blackthornes
+## Version: @project-version@
+## X-License: MIT
+## SavedVariables: BlackthornesPathfinderDB
+## SavedVariablesPerCharacter: BlackthornesPathfinderCharDB
+## IconTexture: Interface\Icons\INV_Misc_Map_01
+
+# Filled in once the project exists on each site. The packager reads these
+# to know where to upload; a line that stays commented is simply skipped.
+# Never copy a sister addon's ID here: a tag would upload to that project.
+# X-Curse-Project-ID:
+# X-Wago-ID:
+# X-WoWI-ID:
+
+Locale\Locale.lua
+Locale\deDE.lua
+Locale\zhCN.lua
+Locale\frFR.lua
+Locale\esES.lua
+Locale\ruRU.lua
+
+Core\Init.lua
+Core\SisterNote.lua
+Core\WhatsNewText.lua
+
+UI\Theme.lua
+UI\BlizzardLook.lua
+UI\Widgets.lua
+UI\Titanforged.lua
+UI\About.lua
+UI\WhatsNew.lua
+UI\SettingsPages.lua
+UI\Minimap.lua
+UI\Settings.lua
+UI\MainWindow.lua
+
+Probe\Probe.lua
