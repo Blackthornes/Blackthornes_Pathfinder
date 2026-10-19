@@ -37,15 +37,22 @@ local APIS = {
     "C_GossipInfo.SelectAvailableQuest", "C_GossipInfo.SelectActiveQuest", "C_GossipInfo.SelectOption",
     "GetGossipAvailableQuests", "GetGossipActiveQuests", "SelectGossipAvailableQuest",
     "GetNumAvailableQuests", "GetNumActiveQuests", "GetQuestID", "AcceptQuest",
-    "IsQuestCompletable", "CompleteQuest", "GetNumQuestChoices", "GetQuestReward",
+    "IsQuestCompletable", "CompleteQuest", "GetNumQuestChoices", "GetNumQuestRewards", "GetQuestReward",
     -- Flight paths.
-    "NumTaxiNodes", "TaxiNodeName", "TaxiNodeGetType", "TaxiNodePosition", "TakeTaxiNode",
+    "NumTaxiNodes", "TaxiNodeName", "TaxiNodeGetType", "TaxiNodePosition", "TaxiNodeCost",
+    "TakeTaxiNode", "GetTaxiMapID",
     "C_TaxiMap.GetAllTaxiNodes", "C_TaxiMap.GetTaxiNodesForMap", "UnitOnTaxi",
-    -- The hearthstone and where it is set.
+    -- The hearthstone and where it is set. Classic's ConfirmBinder is gone on
+    -- Forever; retail confirms the innkeeper through C_PlayerInteractionManager.
     "GetBindLocation", "ConfirmBinder", "C_Container.GetItemCooldown", "GetItemCooldown",
-    -- Trainers and vendors.
+    "C_PlayerInteractionManager.ConfirmationInteraction",
+    "C_PlayerInteractionManager.IsInteractingWithNpcOfType",
+    -- Trainers and vendors. Classic's GetMerchantItemInfo is gone on Forever;
+    -- Butler and Equipment read the vendor through the C_MerchantFrame call
+    -- and the item link.
     "GetNumTrainerServices", "GetTrainerServiceInfo", "BuyTrainerService",
-    "GetMerchantNumItems", "GetMerchantItemInfo", "BuyMerchantItem",
+    "GetMerchantNumItems", "GetMerchantItemInfo", "C_MerchantFrame.GetItemInfo",
+    "GetMerchantItemLink", "GetMerchantItemID", "BuyMerchantItem",
     -- The game's own waypoint, which an arrow could hand the way to.
     "C_Map.SetUserWaypoint", "C_SuperTrack.SetSuperTrackedUserWaypoint",
     "UiMapPoint.CreateFromCoordinates", "C_Navigation.GetDistance",
@@ -63,7 +70,21 @@ local EVENTS = {
 
 -- Words that mark a call as one a guide might use, found under any name.
 -- Quest is left out: C_QuestLog alone would fill the chat window.
-local HINTS = { "gossip", "taxi", "binder", "flightpath", "hearth" }
+local HINTS = { "gossip", "taxi", "binder", "flightpath", "hearth", "playerinteraction" }
+
+-- The kinds of NPC a guide step talks to, by their names in
+-- Enum.PlayerInteractionType, for the "talking to" line.
+local NPC_KINDS = { "Gossip", "QuestGiver", "Merchant", "Trainer", "TaxiNode", "Binder" }
+
+-- The game's quest window pages, by frame name: an offer, "come back when
+-- it's done" (with the Complete Quest button), the reward, and an NPC's list.
+-- Turning in needs CompleteQuest on the second and GetQuestReward on the third.
+local QUEST_PAGES = {
+    { "offer", "QuestFrameDetailPanel" },
+    { "progress", "QuestFrameProgressPanel" },
+    { "reward", "QuestFrameRewardPanel" },
+    { "list", "QuestFrameGreetingPanel" },
+}
 
 -- The hearthstone's item ID, for its cooldown.
 local HEARTHSTONE = 6948
@@ -203,6 +224,94 @@ local function Position()
     return ok and Text(text) or ("map " .. mapID .. ", position raised")
 end
 
+--- Which kinds of NPC the client says the character is talking to, as
+--- "Merchant, Gossip", or why it cannot say.
+local function TalkingTo()
+    if not Has("C_PlayerInteractionManager.IsInteractingWithNpcOfType") then return "absent" end
+    local kinds = type(_G.Enum) == "table" and _G.Enum.PlayerInteractionType
+    if type(kinds) ~= "table" then return "no Enum.PlayerInteractionType" end
+    local open, unknown = {}, {}
+    for _, name in ipairs(NPC_KINDS) do
+        local kind = kinds[name]
+        if kind == nil then
+            unknown[#unknown + 1] = name
+        else
+            local ok, yes = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, kind)
+            if ok and yes == true then open[#open + 1] = name end
+        end
+    end
+    local text = #open > 0 and table.concat(open, ", ") or "nobody"
+    if #unknown > 0 then text = text .. "; no kind " .. table.concat(unknown, ", ") end
+    return text
+end
+
+--- Every gossip option, in the order the window shows them, as
+--- "[0] 12345 Trick or Treat! (icon 132053)", so a step can pick one by its
+--- ID. The client hands the list back in its own order, not the window's.
+local function GossipOptions()
+    if not Has("C_GossipInfo.GetOptions") then return "absent" end
+    local ok, text = pcall(function()
+        local options = C_GossipInfo.GetOptions() or {}
+        local sorted = {}
+        for _, option in pairs(options) do
+            if type(option) == "table" then sorted[#sorted + 1] = option end
+        end
+        table.sort(sorted, function(a, b)
+            return (tonumber(a.orderIndex) or 0) < (tonumber(b.orderIndex) or 0)
+        end)
+        local parts = {}
+        for _, option in ipairs(sorted) do
+            parts[#parts + 1] = ("[%s] %s %s (icon %s)"):format(Text(option.orderIndex),
+                Text(option.gossipOptionID), Text(option.name), Text(option.icon))
+        end
+        return #parts .. (#parts > 0 and (": " .. table.concat(parts, "; ")) or "")
+    end)
+    return ok and text or "raised"
+end
+
+--- The flight map's paths: how many of each type, then every one the
+--- character can fly to as "Thunder Bluff (REACHABLE, 9 copper)". Names are
+--- the client's, in its language, so a step should not find a path by name.
+local function FlightPaths()
+    if not Has("NumTaxiNodes") then return "absent" end
+    local ok, text = pcall(function()
+        local count = tonumber(NumTaxiNodes()) or 0
+        local byType, open = {}, {}
+        for i = 1, count do
+            local kind = Text(Has("TaxiNodeGetType") and TaxiNodeGetType(i) or "?")
+            byType[kind] = (byType[kind] or 0) + 1
+            if kind == "REACHABLE" or kind == "CURRENT" then
+                local cost = Has("TaxiNodeCost") and Text(TaxiNodeCost(i)) or "?"
+                open[#open + 1] = ("%s (%s, %s copper)"):format(Text(TaxiNodeName(i)), kind, cost)
+            end
+        end
+        local kinds = {}
+        for kind, n in pairs(byType) do kinds[#kinds + 1] = kind .. " " .. n end
+        table.sort(kinds)
+        local head = count .. (#kinds > 0 and (" (" .. table.concat(kinds, ", ") .. ")") or "")
+        return head .. (#open > 0 and (": " .. table.concat(open, "; ")) or "")
+    end)
+    return ok and text or "raised"
+end
+
+--- Which page of the game's quest window is showing, as "reward", or
+--- "none" when the window is shut.
+local function QuestPage()
+    local shown, missing = {}, {}
+    for _, page in ipairs(QUEST_PAGES) do
+        local frame = _G[page[2]]
+        if type(frame) ~= "table" then
+            missing[#missing + 1] = page[2]
+        else
+            local ok, yes = pcall(frame.IsShown, frame)
+            if ok and yes == true then shown[#shown + 1] = page[1] end
+        end
+    end
+    local text = #shown > 0 and table.concat(shown, ", ") or "none"
+    if #missing > 0 then text = text .. "; no frame " .. table.concat(missing, ", ") end
+    return text
+end
+
 --- How many quests the client says this character has done.
 local function CompletedCount()
     for _, name in ipairs({ "C_QuestLog.GetAllCompletedQuestIDs", "GetQuestsCompleted" }) do
@@ -270,12 +379,18 @@ function Probe:Run()
     -- These answer only with the matching window open.
     Line("gossip quests", Read("C_GossipInfo.GetAvailableQuests") .. "; active "
         .. Read("C_GossipInfo.GetActiveQuests"))
-    Line("gossip options", Read("C_GossipInfo.GetOptions"))
+    Line("gossip options", GossipOptions())
     Line("quest window", Read("GetQuestID") .. "; completable " .. Read("IsQuestCompletable"))
-    Line("flight paths", Read("NumTaxiNodes") .. "; first " .. Read("TaxiNodeName", 1)
-        .. ", " .. Read("TaxiNodeGetType", 1))
+    Line("quest page", QuestPage() .. "; reward choices " .. Read("GetNumQuestChoices")
+        .. ", rewards " .. Read("GetNumQuestRewards"))
+    Line("flight paths", FlightPaths())
+    local taxiMap = Has("GetTaxiMapID") and select(2, pcall(GetTaxiMapID)) or nil
+    Line("flight nodes", "map " .. Text(taxiMap) .. "; "
+        .. (taxiMap and Read("C_TaxiMap.GetAllTaxiNodes", taxiMap) or "no map"))
+    Line("talking to", TalkingTo())
     Line("trainer", Read("GetNumTrainerServices") .. "; first " .. Read("GetTrainerServiceInfo", 1))
-    Line("vendor", Read("GetMerchantNumItems"))
+    Line("vendor", Read("GetMerchantNumItems") .. "; first " .. Read("C_MerchantFrame.GetItemInfo", 1)
+        .. "; link " .. Read("GetMerchantItemLink", 1) .. "; id " .. Read("GetMerchantItemID", 1))
 
     Line("hearth set at", Read("GetBindLocation"))
     Line("hearth cooldown", Read("C_Container.GetItemCooldown", HEARTHSTONE) .. "; "

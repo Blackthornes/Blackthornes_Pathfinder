@@ -58,6 +58,91 @@ text = env.ChatText()
 suite.check("a place with no position says so", text:find("position|r  map 1411, no position here", 1, true), text)
 _G.C_Map = nil
 
+-- At a vendor, read the retail way: classic's GetMerchantItemInfo is gone on
+-- Forever, and the client says which kind of NPC is open.
+ns = env.Load()
+_G.GetMerchantNumItems = function() return 11 end
+_G.C_MerchantFrame = { GetItemInfo = function() return { name = "Refreshing Spring Water", price = 25 } end }
+_G.GetMerchantItemLink = function() return "|Hitem:159::|h[Refreshing Spring Water]|h" end
+_G.Enum = { PlayerInteractionType = { Gossip = 3, QuestGiver = 4, Merchant = 5, Trainer = 7, TaxiNode = 6 } }
+_G.C_PlayerInteractionManager = { IsInteractingWithNpcOfType = function(kind) return kind == 5 end }
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("reads the vendor's first item",
+    text:find("vendor|r  11; first table of 2: name=Refreshing Spring Water, price=25;", 1, true), text)
+suite.check("and its link", text:find("link |Hitem:159::|h[Refreshing Spring Water]|h; id absent", 1, true), text)
+suite.check("says which kind of NPC is open, and which kinds the client lacks",
+    text:find("talking to|r  Merchant; no kind Binder", 1, true), text)
+_G.C_PlayerInteractionManager.IsInteractingWithNpcOfType = function() error("secret value") end
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("a kind that raises reads as not open", text:find("talking to|r  nobody; no kind Binder", 1, true), text)
+_G.GetMerchantNumItems, _G.C_MerchantFrame, _G.GetMerchantItemLink = nil, nil, nil
+_G.Enum, _G.C_PlayerInteractionManager = nil, nil
+
+-- At an innkeeper, every gossip option in the window's order, by ID.
+ns = env.Load()
+_G.C_GossipInfo = { GetOptions = function()
+    return {
+        { orderIndex = 4, gossipOptionID = 95572, name = "Tell me about dungeons I could explore.", icon = 132053 },
+        { orderIndex = 1, gossipOptionID = 30001, name = "Make this inn your home.", icon = 132052 },
+    }
+end }
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("lists every gossip option in the window's order",
+    text:find("gossip options|r  2: [1] 30001 Make this inn your home. (icon 132052); "
+        .. "[4] 95572 Tell me about dungeons I could explore. (icon 132053)", 1, true), text)
+_G.C_GossipInfo.GetOptions = function() error("secret value") end
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("a gossip list that raises says so", text:find("gossip options|r  raised", 1, true), text)
+_G.C_GossipInfo = nil
+
+-- At a flight map: each path the character can fly to, with its cost.
+ns = env.Load()
+local nodes = {
+    { "Thunder Bluff, Mulgore", "REACHABLE", 120 },
+    { "Orgrimmar, Durotar", "CURRENT", 0 },
+    { "Ratchet, The Barrens", "DISTANT", 50 },
+}
+_G.NumTaxiNodes = function() return #nodes end
+_G.TaxiNodeName = function(i) return nodes[i][1] end
+_G.TaxiNodeGetType = function(i) return nodes[i][2] end
+_G.TaxiNodeCost = function(i) return nodes[i][3] end
+_G.GetTaxiMapID = function() return 1414 end
+_G.C_TaxiMap = { GetAllTaxiNodes = function() return { { nodeID = 23, name = "Orgrimmar, Durotar" } } end }
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("counts the paths by type and lists the ones it can fly to",
+    text:find("flight paths|r  3 (CURRENT 1, DISTANT 1, REACHABLE 1): Thunder Bluff, Mulgore (REACHABLE, 120 copper); "
+        .. "Orgrimmar, Durotar (CURRENT, 0 copper)", 1, true), text)
+suite.check("reads the flight nodes for the map",
+    text:find("flight nodes|r  map 1414; table of 1, first: name=Orgrimmar, Durotar, nodeID=23", 1, true), text)
+_G.NumTaxiNodes = function() error("secret value") end
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("a flight map that raises says so", text:find("flight paths|r  raised", 1, true), text)
+_G.NumTaxiNodes, _G.TaxiNodeName, _G.TaxiNodeGetType, _G.TaxiNodeCost = nil, nil, nil, nil
+_G.GetTaxiMapID, _G.C_TaxiMap = nil, nil
+
+-- At a turn-in, which page of the quest window shows.
+ns = env.Load()
+local function Panel(shown) return { IsShown = function() return shown end } end
+_G.QuestFrameDetailPanel, _G.QuestFrameProgressPanel = Panel(false), Panel(false)
+_G.QuestFrameRewardPanel = Panel(true)
+_G.GetNumQuestChoices = function() return 2 end
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("says which quest page shows, and which frames the client lacks",
+    text:find("quest page|r  reward; no frame QuestFrameGreetingPanel; reward choices 2, rewards absent", 1, true), text)
+_G.QuestFrameRewardPanel = { IsShown = function() error("secret value") end }
+ns.HandleSlash("probe")
+text = env.ChatText()
+suite.check("a page that raises reads as not shown", text:find("quest page|r  none; no frame", 1, true), text)
+_G.QuestFrameDetailPanel, _G.QuestFrameProgressPanel, _G.QuestFrameRewardPanel = nil, nil, nil
+_G.GetNumQuestChoices = nil
+
 -- A secret value: tostring hands back the value itself, ".." hands back a
 -- secret too, and only table.concat raises, which is what the client did.
 ns = env.Load()
