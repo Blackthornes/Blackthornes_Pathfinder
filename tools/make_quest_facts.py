@@ -33,6 +33,12 @@ Writes:
                              for walking times
   tools/facts/training.json  [CLASS] = the levels a trainer has new spells at
 
+When tools/facts/recorded.json is there (tools/fold_recording.py writes it
+from the recorder's runs), what the game really showed is laid over the
+rest: who offers and takes back each quest and where (Forever's spot beats
+Classic's), where its objectives moved on (`obj_seen`), and the XP it gave
+(`xp_seen`). A quest only a run met is added from the run.
+
 Facts the probe read in game (docs/FOREVER_API_FINDINGS.md) that no source
 holds are in PROBED below, each with the run that saw it; they are laid
 over the rest. Add one only from a probe or a recorded run.
@@ -51,6 +57,7 @@ import csv
 import json
 import math
 import re
+import statistics
 import sys
 from pathlib import Path
 
@@ -294,6 +301,51 @@ class Maps:
         return best and best[1]
 
 
+def lay_recorded(facts, forever_ids):
+    """What the recorder saw, over the rest. How many quests it touched."""
+    path = OUT / "recorded.json"
+    if not path.exists():
+        return 0
+    rec = json.load(open(path, encoding="utf-8"))
+    names = {int(k): v.get("name") for k, v in rec.get("npcs", {}).items()}
+    touched = 0
+    for key, r in rec.get("quests", {}).items():
+        qid = int(key)
+        if qid not in forever_ids:
+            continue
+        fact = facts.get(qid)
+        if fact is None:
+            fact = {"id": qid, "title": r.get("title"), "lvl": r.get("level_seen") or 0,
+                    "min": r.get("level_seen") or 0, "forever": "new"}
+            if r.get("side"):
+                fact["side"] = r["side"]
+            facts[qid] = fact
+        for part in ("start", "end"):
+            got = r.get(part)
+            if not got:
+                continue
+            old = (fact.get(part) or [{}])[0]
+            who = {"npc": got["npc"]} if got.get("npc") else {}
+            # The old name holds while it names the same NPC, or one whose
+            # ID no source had.
+            same = old.get("npc") in (None, got.get("npc"))
+            name = names.get(got.get("npc")) or (old.get("name") if same else None)
+            if name:
+                who["name"] = name
+            if got.get("at"):
+                who["at"] = [got["at"]]
+            elif old.get("at") and old.get("npc") == got.get("npc"):
+                who["at"] = old["at"]
+            fact[part] = [who]
+        if r.get("obj"):
+            fact["obj_seen"] = r["obj"]
+        if r.get("xp"):
+            fact["xp_seen"] = int(statistics.median(r["xp"]))
+        fact["recorded"] = True
+        touched += 1
+    return touched
+
+
 def map_sizes(maps):
     """{uiMap: {name, yards: [wide, tall]}} for zone and city maps."""
     out = {}
@@ -529,6 +581,7 @@ def main(argv):
         if qid in facts:
             facts[qid][field] = value
             facts[qid].setdefault("probed", []).append(field)
+    seen = lay_recorded(facts, forever_ids)
 
     OUT.mkdir(parents=True, exist_ok=True)
     with open(OUT / "quests.jsonl", "w", encoding="utf-8", newline="\n") as f:
@@ -544,6 +597,7 @@ def main(argv):
     with open(OUT / "training.json", "w", encoding="utf-8", newline="\n") as f:
         json.dump(dict(sorted(equip["training"].items())), f, separators=(",", ":"))
         f.write("\n")
+    print(f"recorded runs laid over {seen} quests")
     print(f"XP column most Classic quests match: {usual} ({matched[usual]} of {sum(matched.values())})")
     print(f"quests: {kept} Classic kept, {gone} Classic gone on Forever, {new} Forever-only learned, "
           f"{unknown} Forever-only not met yet")
