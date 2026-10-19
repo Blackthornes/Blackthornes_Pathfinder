@@ -61,6 +61,19 @@ downloaded, and rerun it when they are pulled again.
 `Data/Routes/` (never edit a route by hand; fix the facts or the planner),
 and `tools/test_routes.py` checks every route.
 
+The recorder (`Logic/Recorder.lua`, the owner, 2026-10-19: "You can track
+as I level"): `/bpath record on|off|new` is typed only (set straight in
+`ns.commands`, so it is in neither the help list nor Settings) and its chat
+lines stay English, since it is for us. While on, each character keeps
+runs account wide in `BlackthornesPathfinderDB.recorded[guid].runs`, on
+or off by `recorder`; never rename either. The event shapes are listed at
+the top of the file. When the owner says he has leveled with it on, ask
+for his account save the way "Reading the probe" says, then run
+`tools/fold_recording.py <save>`, `tools/make_quest_facts.py` and
+`tools/plan_route.py`, and commit only what they write to `tools/facts/`
+and `Data/Routes/`, never the save. Tested in `tools/test_recorder.lua`
+and `tools/test_fold_recording.py`.
+
 ## How this repo was set up
 
 It copies its sisters on purpose, most closely Pets (copied 2026-10-18, the

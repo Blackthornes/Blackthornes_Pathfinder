@@ -140,7 +140,9 @@ def load_facts():
             quests[q["id"]] = q
     maps = json.load(open(FACTS / "maps.json", encoding="utf-8"))
     training = json.load(open(FACTS / "training.json", encoding="utf-8"))
-    return quests, maps, training
+    pace_file = FACTS / "pace.json"
+    pace = json.load(open(pace_file, encoding="utf-8")) if pace_file.exists() else {}
+    return quests, maps, training, pace
 
 
 class Need:
@@ -166,7 +168,11 @@ class Planner:
         if name not in ROUTES:
             raise SystemExit(f"no route {name}; known: {', '.join(ROUTES)}")
         self.name, self.route = name, ROUTES[name]
-        self.facts, self.maps, self.training = load_facts()
+        self.facts, self.maps, self.training, pace = load_facts()
+        # The owner's real pace, once the recorder has measured it
+        # (tools/fold_recording.py), over the guesses above.
+        self.run = pace.get("run") or RUN
+        self.kill = pace.get("kill")
         self.pool = self.quests_here()
 
     # Places and walking.
@@ -180,7 +186,7 @@ class Planner:
         return math.hypot((a[1] - b[1]) / 100 * wide, (a[2] - b[2]) / 100 * tall)
 
     def walk(self, a, b):
-        return self.yards(a, b) * DETOUR / RUN
+        return self.yards(a, b) * DETOUR / self.run
 
     def inside(self, at):
         x0, x1, y0, y1 = self.route["box"]
@@ -226,6 +232,15 @@ class Planner:
         if q["id"] in self.route["handoff"]:
             return []
         out = []
+        seen = q.get("obj_seen") or {}
+        if seen and (q["forever"] == "new" or not q.get("obj")):
+            # Only the recorder knows this quest's objectives: where each
+            # moved on, and how many it needs.
+            for n in sorted(seen, key=int):
+                o = seen[n]
+                out.append(Need(("seen", q["id"], int(n)), "loot", o.get("need") or 1, 100,
+                                [tuple(s) for s in o.get("spots", [])], None, f"objective {n}"))
+            return out
         obj = q.get("obj") or {}
         for k in obj.get("kill", []):
             out.append(Need(("npc", k["npc"]), "kill", k.get("count") or 1, 100,
@@ -307,7 +322,7 @@ class Planner:
             at = self.spot_of(q.get("end"))
             s["t"] += self.walk(s["at"], at) + TALK
             s["at"] = at or s["at"]
-            xp = quest_xp(s["level"], q["lvl"], q.get("xp") or q.get("xp_forever") or 0)
+            xp = quest_xp(s["level"], q["lvl"], q.get("xp_seen") or q.get("xp") or q.get("xp_forever") or 0)
             self.gain(s, xp)
             del s["log"][qid]
             s["done"] = s["done"] | {qid}
@@ -326,7 +341,7 @@ class Planner:
                 between = self.between(need)
                 for _ in range(tries):
                     if need.source[0] == "npc":
-                        s["t"] += KILL + REST + between
+                        s["t"] += self.kill or (KILL + REST + between)
                         got = kill_xp(s["level"], need.level)
                         xp += got
                         self.gain(s, got)
@@ -358,7 +373,7 @@ class Planner:
         gaps = []
         for a in spots:
             gaps.append(min(self.yards(a, b) for b in spots if b is not a))
-        return min(12.0, sum(gaps) / len(gaps) * DETOUR / RUN / 2)
+        return min(12.0, sum(gaps) / len(gaps) * DETOUR / self.run / 2)
 
     def finished(self, s):
         hi = self.route["levels"][1]
@@ -518,7 +533,7 @@ def apply_grind(planner):
         s["t"] += planner.walk(s["at"], at)
         s["at"] = at
         for _ in range(GRIND_KILLS):
-            s["t"] += KILL + REST + planner.between(need)
+            s["t"] += planner.kill or (KILL + REST + planner.between(need))
             got = kill_xp(s["level"], need.level)
             xp += got
             planner.gain(s, got)

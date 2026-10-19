@@ -297,14 +297,35 @@ Forever build 1.60.1.70245 on 2026-10-19:
 In Durotar alone that gives 73 Horde quests up to level 14 to plan from,
 with only one of Forever's own known so far.
 
-**During play: the recorder** (`/bpath record`, a draft name). The owner
-will level with it on (2026-10-19); it is not offered to players for now.
-It keeps every quest offered, accepted, completed and turned in, with the
-quest ID, the NPC ID, the map and spot, the time and the character's XP,
-plus each flight path, innkeeper, vendor and trainer, and each mob killed
-with its spot. A tool folds the save into the facts (as Equipment's
-`tools/forever_quests.py` reads `learnedQuests`): Forever's new quests get
-their givers and objectives, and every step gets a real time.
+**During play: the recorder** (`Logic/Recorder.lua`, built 2026-10-19).
+The owner levels with it on; it is not offered to players for now, so
+`/bpath record on`, `off`, `new` (a fresh run) and plain `record` (how much
+it has kept) are typed only. While it is on it keeps, per character and
+account wide in `recorded`:
+- every quest offered, accepted and turned in, with the quest ID, the NPC
+  ID, the spot and the XP and money the game gave;
+- each objective as it moves on, with where it happened;
+- each kill that gave XP (the dead target's NPC ID) and where;
+- XP and level-ups, where the character walks (every 5 seconds once it has
+  moved), every NPC window (gossip, vendor, trainer, flight master) with
+  its NPC ID and spot, the flight map's paths and the flights taken, the
+  hearthstone's new place, spells cast out of a fight, zones and deaths.
+
+Kills are read from the XP the game gives and the target lying dead, not
+the combat log, which Forever's engine may keep from addons (Farmer reads
+kill XP the same way).
+
+After a session the owner types `/reload` or logs out, and
+`tools/fold_recording.py <save>` reads only `recorded`, in a Lua sandbox,
+and writes `tools/facts/recorded.json` (per quest: giver, hand-in,
+objective spots, real XP, the level it was met at; per mob: kill spots;
+per NPC: name, kind and spot) and `tools/facts/pace.json` (the medians of
+walking speed and seconds a kill). No character key, name or date gets
+through. `tools/make_quest_facts.py` then lays the run over the other
+facts, Forever's spots over Classic's, a quest only a run met added from
+it, and `tools/plan_route.py` plans with the real pace instead of its
+guesses. Tried on a made-up run: once the recorder places Wayward
+Weapons' objective, the planner puts the quest in the route by itself.
 
 ## The first route
 

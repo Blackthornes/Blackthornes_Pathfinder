@@ -26,6 +26,8 @@ Core\Init.lua
 Core\SisterNote.lua
 Core\WhatsNewText.lua
 
+Logic\Recorder.lua
+
 UI\Theme.lua
 UI\BlizzardLook.lua
 UI\Widgets.lua
