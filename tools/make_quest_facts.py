@@ -17,7 +17,10 @@ Run from the repository root with the sources somewhere outside it:
                                    quest level, its maps and flight paths
   Blackthornes_Equipment           Data/ForeverQuests.lua and
                                    Data/ForeverNPCs.lua: quests and spots met
-                                   on Forever that Classic lacks
+                                   on Forever that Classic lacks;
+                                   Data/ClassSpells.lua: the levels each
+                                   class has spells to train at, from the
+                                   Forever client's tables
 
 Never commit the sources or the tables, and never name where the tables
 were downloaded. Rerun after any of them is pulled again.
@@ -26,6 +29,13 @@ Writes:
   tools/facts/quests.jsonl   one quest a line, sorted by ID (see Fact below)
   tools/facts/flights.json   flight paths: each node's spot and side, and
                              each path's cost and length in yards
+  tools/facts/maps.json      each zone and city map's name and size in yards,
+                             for walking times
+  tools/facts/training.json  [CLASS] = the levels a trainer has new spells at
+
+Facts the probe read in game (docs/FOREVER_API_FINDINGS.md) that no source
+holds are in PROBED below, each with the run that saw it; they are laid
+over the rest. Add one only from a probe or a recorded run.
 
 A Classic quest Forever's QuestV2 lacks is left out. A quest only Forever
 has comes from Equipment's learned quests, with what they hold (title,
@@ -60,6 +70,16 @@ SPOTS_MOST = 24
 # DROPS_MOST of them, best first.
 DROP_LEAST = 2
 DROPS_MOST = 6
+
+# Seen in game, not in any source: (quest ID, field, value, the run).
+PROBED = [
+    # Orc mage, level 1, Valley of Trials, 2026-10-19: handed in to Kzan
+    # Thornslash, the Weaponsmith in the Den (Classic's NPC 3159, whose
+    # Classic spot is in Razor Hill, so no spot is kept), for 6 Abandoned
+    # Training Weapons. Where the weapons are is not known yet.
+    (97279, "end", [{"npc": 3159, "name": "Kzan Thornslash", "place": "the Den"}], "2026-10-19"),
+    (97279, "obj", {"item": [{"name": "Abandoned Training Weapon", "count": 6}]}, "2026-10-19"),
+]
 
 
 def read_csv(folder, name):
@@ -165,7 +185,14 @@ def load_equipment(folder):
     """Equipment's Forever quests and NPC spots, read with Lua."""
     lua = lua51.LuaRuntime(unpack_returned_tuples=True)
     lua.execute("ns = {}")
-    out = {"quests": {}, "npcs": {}}
+    out = {"quests": {}, "npcs": {}, "training": {}}
+    path = folder / "Data" / "ClassSpells.lua"
+    if path.exists():
+        lua.compile(path.read_text(encoding="utf-8"))("", lua.eval("ns"))
+        spells = lua.eval("ns.CLASS_SPELLS") or {}
+        for cls in spells:
+            levels = {int(spells[cls][i][2]) for i in spells[cls]}
+            out["training"][cls] = sorted(levels)
     for name, key in (("ForeverQuests.lua", "ForeverQuests"), ("ForeverNPCs.lua", "ForeverNPCs")):
         path = folder / "Data" / name
         if not path.exists():
@@ -267,6 +294,24 @@ class Maps:
         return best and best[1]
 
 
+def map_sizes(maps):
+    """{uiMap: {name, yards: [wide, tall]}} for zone and city maps."""
+    out = {}
+    for r in maps.assign:
+        mid = int(r["UiMapID"])
+        um = maps.uimaps.get(mid)
+        if not um or um["Type"] not in ("3", "4") or str(mid) in out:
+            continue
+        du = float(r["UiMax_0"]) - float(r["UiMin_0"])
+        dv = float(r["UiMax_1"]) - float(r["UiMin_1"])
+        if du <= 0 or dv <= 0:
+            continue
+        wide = (float(r["Region_4"]) - float(r["Region_1"])) / du
+        tall = (float(r["Region_3"]) - float(r["Region_0"])) / dv
+        out[str(mid)] = {"name": um["Name_lang"], "yards": [round(wide, 1), round(tall, 1)]}
+    return dict(sorted(out.items(), key=lambda kv: int(kv[0])))
+
+
 def flights(tables, maps):
     nodes = {}
     for r in read_csv(tables, "TaxiNodes"):
@@ -341,6 +386,13 @@ def main(argv):
         keep = home_map if home_map in {s[0] for s in out} else common
         return thin([list(s) for s in out if s[0] == keep])
 
+    def mob_level(uid):
+        """A mob's level as pfQuest gives it ("5" or "5-6"), as a number: the middle."""
+        entry = units[uid]
+        text = str(entry and entry["lvl"] or "")
+        parts = [float(p) for p in text.split("-") if p.strip().replace(".", "").isdigit()]
+        return round(sum(parts) / len(parts), 1) if parts else None
+
     def npc(uid, home_map=None):
         name = unit_names[uid]
         spots = spots_of(units[uid], home_map)
@@ -365,6 +417,7 @@ def main(argv):
         return out
 
     facts, gone, kept = {}, 0, 0
+    matched = collections.Counter()
     for qid in pf_quests:
         qid = int(qid)
         pq = pf_quests[qid]
@@ -392,6 +445,9 @@ def main(argv):
                          ("type", "Type"), ("money", "RewOrReqMoney")):
             if row.get(col):
                 fact[key] = row[col]
+        spell = row.get("RewSpellCast") or row.get("RewSpell")
+        if spell:
+            fact["spell"] = spell
         xp = classic_xp(row) if row else 0
         if xp:
             fact["xp"] = xp
@@ -399,11 +455,14 @@ def main(argv):
             if levels:
                 # The Forever row nearest Classic's number, as a second guess.
                 fact["xp_forever"] = min((v for v in levels if v), key=lambda v: abs(v - xp), default=0)
+                if fact["xp_forever"]:
+                    matched[levels.index(fact["xp_forever"])] += 1
 
         objectives = {}
         kills = []
         for n, uid in enumerate(lua_list((pq["obj"] or {})["U"]) if pq["obj"] else []):
-            entry = {"npc": int(uid), "name": unit_names[uid], "spots": spots_of(units[uid], home)}
+            entry = {"npc": int(uid), "name": unit_names[uid], "lvl": mob_level(uid),
+                     "spots": spots_of(units[uid], home)}
             for i in range(1, 5):
                 if row.get(f"ReqCreatureOrGOId{i}") == int(uid):
                     entry["count"] = row.get(f"ReqCreatureOrGOCount{i}")
@@ -428,8 +487,10 @@ def main(argv):
                 for k in (part or {}):
                     chance = float(part[k] or 0)
                     if chance >= DROP_LEAST:
-                        drops.append({kind: int(k), "chance": round(chance, 1),
-                                      "spots": spots_of(table[k], home)})
+                        drop = {kind: int(k), "chance": round(chance, 1), "spots": spots_of(table[k], home)}
+                        if kind == "npc":
+                            drop["lvl"] = mob_level(k)
+                        drops.append(drop)
             for vid in (lua_list(it["V"]) if it and it["V"] else []):
                 drops.append({"vendor": int(vid), "spots": spots_of(units[vid], home)[:1]})
             drops.sort(key=lambda d: -d.get("chance", 100))
@@ -444,12 +505,17 @@ def main(argv):
         facts[qid] = fact
         kept += 1
 
+    # Which column of Forever's XP table Classic's quests land on most: a
+    # Forever quest with no XP known is guessed from that column.
+    usual = matched.most_common(1)[0][0] if matched else None
     new = 0
     for qid, q in equip["quests"].items():
         if qid in facts or qid not in forever_ids:
             continue
         fact = {"id": qid, "title": q.get("title"), "lvl": int(q.get("level") or q.get("min") or 0),
                 "min": int(q.get("min") or 0), "forever": "new", "side": q.get("side")}
+        if usual is not None and quest_xp.get(fact["lvl"]):
+            fact["xp_forever"], fact["xp_guess"] = quest_xp[fact["lvl"]][usual], True
         mid = maps.of_name(q.get("zone")) if q.get("zone") else None
         if q.get("giver"):
             giver = {"name": q["giver"]}
@@ -459,6 +525,10 @@ def main(argv):
         facts[qid] = fact
         new += 1
     unknown = len(forever_ids - set(facts))
+    for qid, field, value, _ in PROBED:
+        if qid in facts:
+            facts[qid][field] = value
+            facts[qid].setdefault("probed", []).append(field)
 
     OUT.mkdir(parents=True, exist_ok=True)
     with open(OUT / "quests.jsonl", "w", encoding="utf-8", newline="\n") as f:
@@ -468,6 +538,13 @@ def main(argv):
     with open(OUT / "flights.json", "w", encoding="utf-8", newline="\n") as f:
         json.dump(fl, f, ensure_ascii=False, indent=1)
         f.write("\n")
+    with open(OUT / "maps.json", "w", encoding="utf-8", newline="\n") as f:
+        json.dump(map_sizes(maps), f, ensure_ascii=False, indent=1)
+        f.write("\n")
+    with open(OUT / "training.json", "w", encoding="utf-8", newline="\n") as f:
+        json.dump(dict(sorted(equip["training"].items())), f, separators=(",", ":"))
+        f.write("\n")
+    print(f"XP column most Classic quests match: {usual} ({matched[usual]} of {sum(matched.values())})")
     print(f"quests: {kept} Classic kept, {gone} Classic gone on Forever, {new} Forever-only learned, "
           f"{unknown} Forever-only not met yet")
     print(f"flights: {len(fl['nodes'])} nodes, {len(fl['paths'])} paths")

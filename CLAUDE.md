@@ -57,6 +57,9 @@ playing comes first (the owner, 2026-10-19): `tools/make_quest_facts.py
 Forever client's game tables and Equipment's learned quests and spots.
 Never commit the sources or the tables, never name where the tables were
 downloaded, and rerun it when they are pulled again.
+`tools/plan_route.py <route>` plans a route from those facts into
+`Data/Routes/` (never edit a route by hand; fix the facts or the planner),
+and `tools/test_routes.py` checks every route.
 
 ## How this repo was set up
 
@@ -491,8 +494,10 @@ same.
   so never ask him to paste one anywhere.
 - **Changelogs come from git history.** Work out what changed since the last
   tag from the merged PRs and commits (`git log vX.Y.Z..origin/main --merges`);
-  never ask the owner what went in. Claude drafts the CHANGELOG section in a PR;
-  The owner merges, pulls `main`, tags and pushes.
+  never ask the owner what went in. Claude drafts the CHANGELOG section in a PR.
+  Here Claude merges each PR once its checks pass, with a merge commit, and
+  pulls `main` (the owner, 2026-10-19: "You are doing the merging and
+  pulling"); the owner tags.
 - **A checkout shows the real version number** (the owner,
   2026-10-12). `ns.RELEASED_VERSION` in `Core/Init.lua` is the newest
   `## X.Y.Z` in CHANGELOG.md, shown when the packager has not filled in the
@@ -500,12 +505,10 @@ same.
   writes the CHANGELOG section changes it too; `tools/check_release.py`
   refuses a tag it does not match, and `tools/test_check_release.py` fails
   while the two disagree. This rule is in every addon's notes.
-- **Every reply that ships code ends with the GitHub Desktop steps,** naming
-  the branch: merge the PR on github.com (Ready for review, then Merge pull
-  request); in GitHub Desktop switch **Current branch** to **main** and click
-  **Pull origin**; then say whether the game needs `/reload` or a full restart
-  (a full restart when a file is added, removed or renamed, or the TOC
-  changes). For a release, add: History, right-click the newest commit,
+- **Every reply that ships code says it is merged and pulled** (in this
+  repo Claude does both, see above), naming the PR, and whether the game
+  needs `/reload` or a full restart (a full restart when a file is added,
+  removed or renamed, or the TOC changes). For a release, add: History, right-click the newest commit,
   Create Tag, `vX.Y.Z`, Push origin. Remind him to pull `main` first, or the
   tag lands on an old commit and nothing runs.
 - **CurseForge descriptions are features only.** Leave out privacy notes and
