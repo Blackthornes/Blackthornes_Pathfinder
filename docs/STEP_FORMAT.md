@@ -2,8 +2,9 @@
 
 **A draft for the owner to look over (2026-10-19). Nothing in the game is
 built yet**, and every name in it can still change; the owner's answers to
-its questions are under "Decided". The quest facts tool is built (see
-"Where the facts come from"). It says how a route is
+its questions are under "Decided". Built so far: the quest facts tool
+(see "Where the facts come from"), the planner and the first route (see
+"The first route"), and the route check. It says how a route is
 written down, how the guide knows each step is done, and how routes get
 made: worked out by a planner to be the fastest way to level, then made
 faster with times from real runs.
@@ -24,8 +25,9 @@ Four parts, each feeding the next:
    hearthstones and training that gets from level A to level B in the
    least time. It writes a route.
 3. **Routes** (`Data/Routes/*.lua`, shipped): the step lists the guide
-   follows. A route is plain data that can still be read and edited by
-   hand, so a step the planner got wrong can be fixed in place.
+   follows. A route is plain data that reads easily, but it is written by
+   the planner: a step it got wrong is fixed in the facts or the planner,
+   and the route planned again, so the next plan keeps the fix.
 4. **The guide in game** (`Logic/Guide.lua` and the window): follows a
    route, ticks steps off as the game shows them done, points the arrow,
    and does the clicks it is allowed to.
@@ -38,17 +40,18 @@ those times replace the planner's guesses, and the next plan is faster.
 ## A route
 
 One file per route under `Data/Routes/`, each adding itself to
-`ns.Routes`. A Lua table, like every other `Data/` file in the house: no
+`ns.Routes`, named for its place (`valley-of-trials`), never its levels:
+the planner decides where a route ends, and the name is kept in saves. A Lua table, like every other `Data/` file in the house: no
 parser to write, the syntax check already reads it, and it can be edited by
 hand.
 
 ```lua
-ns.Routes["durotar-1-6"] = {
+ns.Routes["valley-of-trials"] = {
     title = "Valley of Trials",   -- shown name; a zone name from the client where it can be
     side = "H",
     races = { "Orc", "Troll" },   -- who starts here; nil for anyone of the side
     levels = { 1, 6 },            -- the level it starts at, the level it ends at
-    next = "durotar-6-12",        -- the route that follows, or nil
+    next = "durotar",             -- the route that follows, or nil
     plan = { at = "2026-10-19", minutes = 34 },  -- what the planner expected, filled by the tool
     steps = {
         -- one table per step, below
@@ -77,8 +80,8 @@ it is done to. The rest are optional fields shared by every kind.
 | `home` | true (the innkeeper is `npc`/`at`) | the hearthstone's place changes while at this step's innkeeper, or already reads this place |
 | `hearth` | true | a hearthstone cast finishes and the character lands (soft) |
 | `buy` | item ID (with `count`) | the bags hold at least `count` |
-| `train` | true | a class trainer's list was opened at this level or above (soft) |
-| `level` | a level | the character is at that level (kill along the way) |
+| `train` | the level whose spells to train | a class trainer's list was opened at that level or above (soft) |
+| `level` | a level | the character is at that level (grind along the way) |
 | `use` | item ID | the quest objective it serves moves on (needs `for`), or ticked by hand |
 | `note` | a translated line | ticked by hand |
 
@@ -128,7 +131,7 @@ steps = {
     { turnin = 788,  at = { 1411, 0, 0 } },
     { turnin = 792,  at = { 1411, 0, 0 } },
     { buy = 4540, count = 5, optional = true },                   -- Tough Hunk of Bread
-    { train = true, class = "MAGE" },
+    { train = 4, class = "MAGE" },
 }
 ```
 
@@ -303,9 +306,31 @@ with its spot. A tool folds the save into the facts (as Equipment's
 `tools/forever_quests.py` reads `learnedQuests`): Forever's new quests get
 their givers and objectives, and every step gets a real time.
 
+## The first route
+
+`python tools/plan_route.py valley-of-trials` plans the Valley of Trials
+for every orc and troll class from the facts and writes
+`Data/Routes/valley-of-trials.lua` (2026-10-19). With the guessed speeds it
+expects about 32 minutes to level 5 for most classes, 31 for warlocks, and
+36 for shamans, whose Call of Earth chain teaches their Earth totem and is
+always done. It ends when the valley stops paying better than moving on
+would (`rate_next`, a guess of 2 XP a second): 805, Report to Sen'jin
+Village, is the hand-off to the next route.
+
+What the plan does on its own: picks up everything at the camp before
+heading out, clears boars, peons and cactus apples on the way, makes one
+trip north for the Vile Familiars, Thazz'ril's Pick, the Burning Blade
+Medallion and (for shamans) the Felstalker Hooves, and trains at level 4
+where each class next stands by its trainer. Forever's Wayward Weapons is
+left out: nobody knows yet where its weapons are, and at a guessed 170 XP
+it pays about what moving on does. The recorder settles both.
+
+The route file is not in the TOC yet; it joins when the guide that follows
+it is built.
+
 ## Checking a route
 
-A test (`tools/test_routes.lua`, with the others) reads every route and
+A test (`tools/test_routes.py`, with the others) reads every route and
 refuses one where:
 
 - a step has no action key, or two;
