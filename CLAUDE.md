@@ -103,7 +103,10 @@ Pathfinder beside the other five (`SisterNote.ADDONS`, `About.TITLES`,
 `WhatsNew.ADDONS`, with its map icon). The other five repos do not list it
 yet, so the files differ by those lines only. Add Pathfinder to all their
 copies (and the "a step-by-step leveling guide" line to each one's
-translations) in the same round as Pathfinder's first release, not before:
+translations) in the same round as Pathfinder's first release, not before,
+and only when the owner says so: while Pathfinder is being built, nothing
+here may change the five live addons (the owner, 2026-10-18), so copy from
+them and never into them:
 a sister note naming an addon players cannot get yet would send them
 looking for nothing. Until then the What's New window drawn by a sister's
 copy leaves Pathfinder out.
